@@ -271,14 +271,39 @@
     font-size:14px;
     background:#fff;
   }
-  .add-round label.chk{
-    display:flex;align-items:center;gap:5px;
-    font-size:12px;
+  .phase-toggle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:rgba(42,38,32,0.05);
+    border-radius:8px;
+    padding:9px 12px;
+    font-size:12.5px;
     color:var(--text-dim);
-    cursor:pointer;
-    user-select:none;
-    flex:1;
   }
+  .switch{position:relative;display:inline-block;width:38px;height:22px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;position:absolute;}
+  .switch .slider{
+    position:absolute;inset:0;
+    background:rgba(42,38,32,0.25);
+    border-radius:20px;
+    cursor:pointer;
+    transition:background .15s;
+  }
+  .switch .slider::before{
+    content:"";
+    position:absolute;
+    width:16px;height:16px;
+    left:3px;top:3px;
+    background:#fff;
+    border-radius:50%;
+    transition:transform .15s;
+  }
+  .switch input:checked + .slider{background:var(--player-color,var(--gold));}
+  .switch input:checked + .slider::before{transform:translateX(16px);}
+  .switch input:disabled + .slider{opacity:0.4;cursor:not-allowed;}
+  .switch input:focus-visible + .slider{outline:2px solid var(--text-dark);outline-offset:2px;}
   .add-round button{
     background:var(--text-dark);
     color:var(--paper);
@@ -288,6 +313,7 @@
     font-weight:600;
     font-size:13px;
     cursor:pointer;
+    flex:1;
   }
   .add-round button:hover{filter:brightness(1.2);}
   .add-round input:focus-visible, .add-round button:focus-visible{outline:2px solid var(--text-dark);outline-offset:2px;}
@@ -441,16 +467,16 @@
 
 <script>
 const PHASES = [
-  "2 Sätze zu je 3",
-  "1 Satz zu 3 + 1 Folge zu 4",
-  "1 Satz zu 4 + 1 Folge zu 4",
-  "1 Folge zu 7",
-  "1 Folge zu 8",
-  "1 Folge zu 9",
-  "2 Sätze zu je 4",
-  "7 Karten einer Farbe",
-  "1 Satz zu 5 + 1 Satz zu 2",
-  "1 Satz zu 5 + 1 Satz zu 3"
+  "Zwei Drillinge",
+  "Drilling und Viererfolge",
+  "Vierling und Viererfolge",
+  "Siebenerfolge",
+  "Achterfolge",
+  "Neunerfolge",
+  "Zwei Vierlinge",
+  "Sieben Karten einer Farbe",
+  "Fünfling und Zwilling",
+  "Fünfling und Drilling"
 ];
 const COLORS = ["#c1443c","#3a6ea5","#cf9a3d","#5c8a5c","#8a5ca0","#a05c7a"];
 const LIST_KEY = 'phase10_games';
@@ -479,6 +505,7 @@ function addPlayer(name){
     name: name,
     color: COLORS[colorCursor % COLORS.length],
     phase: 1,
+    pendingComplete: false,
     rounds: []
   });
   colorCursor++;
@@ -507,6 +534,7 @@ function addRound(id, score, completed){
   if(completed && p.phase < 10){
     p.phase += 1;
   }
+  p.pendingComplete = false;
   renderBoard();
   saveCurrentGame();
 }
@@ -518,6 +546,7 @@ function undoLastRound(id){
   if(last.completed && p.phase > last.phase){
     p.phase = last.phase;
   }
+  p.pendingComplete = false;
   renderBoard();
   saveCurrentGame();
 }
@@ -585,20 +614,32 @@ function renderBoard(){
     total.innerHTML = `<span class="label">Gesamt</span><span class="num">${totalScore(p)}</span>`;
     content.appendChild(total);
 
+    const toggleWrap = document.createElement('div');
+    toggleWrap.className = 'phase-toggle';
+    toggleWrap.innerHTML = `
+      <span>Phase schon geschafft?</span>
+      <label class="switch">
+        <input type="checkbox" ${p.pendingComplete ? 'checked' : ''} ${p.phase>10?'disabled':''} aria-label="Phase für die laufende Runde als geschafft markieren">
+        <span class="slider"></span>
+      </label>
+    `;
+    toggleWrap.querySelector('input').addEventListener('change', e => {
+      p.pendingComplete = e.target.checked;
+      saveCurrentGame();
+    });
+    content.appendChild(toggleWrap);
+
     const addRow = document.createElement('form');
     addRow.className = 'add-round';
     addRow.innerHTML = `
-      <input type="number" placeholder="Pkt." aria-label="Punkte für diese Runde" required>
-      <label class="chk"><input type="checkbox" ${p.phase>10?'disabled':''}> Phase geschafft</label>
+      <input type="number" placeholder="Punkte dieser Runde" aria-label="Punkte für diese Runde" required>
       <button type="submit" ${p.phase>10?'disabled':''}>+</button>
     `;
     addRow.addEventListener('submit', e => {
       e.preventDefault();
       const scoreInput = addRow.querySelector('input[type=number]');
-      const chk = addRow.querySelector('input[type=checkbox]');
-      addRound(p.id, scoreInput.value, chk.checked);
+      addRound(p.id, scoreInput.value, !!p.pendingComplete);
       scoreInput.value = '';
-      chk.checked = false;
     });
     content.appendChild(addRow);
 
@@ -713,6 +754,7 @@ function createGame(name, copyFromId){
         name: p.name,
         color: p.color,
         phase: 1,
+        pendingComplete: false,
         rounds: []
       }));
       newColorCursor = src.colorCursor || newPlayers.length;
